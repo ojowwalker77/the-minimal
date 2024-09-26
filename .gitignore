@@ -2,3 +2,4 @@
 .env
 /node_modules
 bug_history.json
+/static
