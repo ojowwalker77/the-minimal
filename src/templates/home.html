@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Minimal Company</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.0.0/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .handwriting {
+            font-family: 'Dancing Script', cursive;
+        }
+        body.light-mode {
+            background-color: #F9FAFB;
+            color: #1F2937;
+            letter-spacing: 0.05em;
+        }
+        body.dark-mode {
+            background-color: #0B0C10;
+            color: #C5C6C7;
+            letter-spacing: 0.05em;
+        }
+        .tools-button {
+            background-color: black;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+            letter-spacing: 0;
+        }
+        body.dark-mode .tools-button {
+            background-color: white;
+            color: black;
+        }
+        .theme-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            cursor: pointer;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background-color: white;
+            color: #1F2937;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        body.dark-mode .modal-content {
+            background-color: #0B0C10;
+            color: #C5C6C7;
+        }
+        .blurred {
+            filter: blur(100px);
+        }
+        .card {
+            background-color: #fff;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        body.dark-mode .card {
+            background-color: #0B0C10;
+            color: #C5C6C7;
+            box-shadow: 0 0px 0px #C5C6C7;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+</head>
+<body class="pt-44 pr-10 pl-10 pb-5 h-screen flex flex-col justify-center items-center text-center light-mode">
+    <div id="contentWrapper" class="pt-44 pr-10 pl-10 pb-5 h-screen flex flex-col justify-center items-center text-center">
+    <button id="themeToggle" class="theme-toggle">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1M12 21v1M4.22 4.22l.71.71M19.07 19.07l.71.71M1 12h1M21 12h1M4.22 19.78l.71-.71M19.07 4.93l.71-.71M12 5a7 7 0 100 14 7 7 0 000-14z" />
+        </svg>
+    </button>
+    <header class="mb-10">
+        <h1 class="text-2xl font-bold"><span>The </span><span class="handwriting text-3xl">Minimal</span></h1>
+    </header>
+    <main>
+        <h2 class="text-1xl font-semibold mb-6">
+            <button class="tools-button" id="openModal">tools</button> that just work.
+        </h2>
+    </main>
+    <div class="modal" id="toolsModal">
+        <div class="modal-content">
+            <h3 class="text-lg font-bold">Available Tools:</h3>
+            <a href="/speech" class="block">
+                <div class="card hover:bg-gray-100 transition">
+                    <h3 class="font-semibold text-lg">Speech</h3>
+                    <p class="text-xs">Free Text-to-Speech</p>
+                </div>
+            </a>
+            <a href="/transcribe" class="block">
+                <div class="card hover:bg-gray-100 transition">
+                    <h3 class="font-semibold text-lg">Transcribe</h3>
+                    <p class="text-xs">Free Speech-To-Text</p>
+                </div>
+            </a>
+        </div>
+    </div>
+    <footer class="mt-auto">
+        <p class="text-xs">© 2024 The Minimal Company</p>
+    </footer>
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        const mainContent = document.querySelector('main');
+        const savedTheme = localStorage.getItem('theme') || 'light-mode';
+        body.classList.add(savedTheme);
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.classList.contains('light-mode') ? 'light-mode' : 'dark-mode';
+            const newTheme = currentTheme === 'light-mode' ? 'dark-mode' : 'light-mode';
+            body.classList.remove(currentTheme);
+            body.classList.add(newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+        const openModalBtn = document.getElementById('openModal');
+        const modal = document.getElementById('toolsModal');
+        openModalBtn.addEventListener('click', () => {
+            modal.classList.add('active');
+            mainContent.classList.add('blurred');
+        });
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.classList.remove('active');
+                mainContent.classList.remove('blurred');
+            }
+        });
+    </script>
+    </div>
+</body>
+</html>
