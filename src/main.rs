@@ -8,12 +8,20 @@ use std::env;
 use dotenv::dotenv;
 use reqwest::Client;
 use uuid::Uuid;
+use std::sync::{Arc, Mutex};
+use comrak::{markdown_to_html, ComrakOptions};
+
 use futures_util::TryStreamExt;
 use std::time::Duration;
 
 #[derive(Deserialize, Serialize)]
 struct TextInput {
     text: String,
+}
+
+#[derive(Clone)]
+struct AppState {
+    global_context: Arc<Mutex<String>>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -116,6 +124,117 @@ async fn generate_audio(text_input: web::Json<TextInput>) -> impl Responder {
         .streaming(audio_stream)
 }
 
+#[post("/update-context")]
+async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
+    let mut context = state.global_context.lock().unwrap();
+    *context = form.text.clone();
+
+    println!("Updated global context: {:?}", form.text);
+
+    HttpResponse::Ok().body("Context updated.")
+}
+
+#[post("/search-ai")]
+async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> impl Responder {
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
+
+    let client = Client::new();
+    let search_query = form.text.clone();
+    let messages = vec![
+        serde_json::json!({
+            "role": "system",
+            "content": "You are an AI assistant that provides quick, concise, and factual information based on the user's query."
+        }),
+        serde_json::json!({
+            "role": "user",
+            "content": format!("Please provide a concise explanation or relevant information about: {}", search_query),
+        })
+    ];
+
+    let payload = serde_json::json!({
+        "model": "gpt-4",
+        "messages": messages,
+        "max_tokens": 80,  // Limit the response to a short summary
+        "temperature": 0.7,
+    });
+
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(res) => match res.json::<serde_json::Value>().await {
+            Ok(result) => {
+                let search_result = result["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("No relevant information found.")
+                    .trim()
+                    .to_string();
+
+                HttpResponse::Ok().json(serde_json::json!({ "result": search_result }))
+            }
+            Err(_) => HttpResponse::InternalServerError().body("Error parsing response from GPT-4."),
+        },
+        Err(_) => HttpResponse::InternalServerError().body("Error calling GPT-4 API."),
+    }
+}
+
+
+#[get("/get-ai-results")]
+async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
+    let context = state.global_context.lock().unwrap().clone();
+
+    if context.is_empty() {
+        return HttpResponse::BadRequest().body("Context is empty.");
+    }
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
+    let client = Client::new();
+    let messages = vec![
+        serde_json::json!({
+            "role": "system",
+            "content": "You are a writing assistant that provides suggestions for the next line of a document."
+        }),
+        serde_json::json!({
+            "role": "user",
+            "content": format!("The document is as follows:\n\n{}\n\nPlease suggest the next line.", context),
+        })
+    ];
+
+    let payload = serde_json::json!({
+        "model": "gpt-4",
+        "messages": messages,
+        "max_tokens": 50,  // Limit response to only a single suggestion
+        "temperature": 1.0,
+    });
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(res) => match res.json::<serde_json::Value>().await {
+            Ok(result) => {
+                // Extract the suggestion from the GPT-4 response
+                let suggestion = result["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("No suggestion available.")
+                    .trim()
+                    .to_string();
+
+                // Return the suggestion as plain text
+                HttpResponse::Ok().body(suggestion)
+            }
+            Err(_) => HttpResponse::InternalServerError().body("Error parsing response from GPT-4."),
+        },
+        Err(_) => HttpResponse::InternalServerError().body("Error calling GPT-4 API."),
+    }
+}
+
 #[get("/")]
 async fn home() -> impl Responder {
     let html = include_str!("templates/home.html");
@@ -136,17 +255,30 @@ async fn transcribe_page() -> impl Responder {
     HttpResponse::Ok().content_type("text/html").body(html)
 }
 
+#[get("/notes")]
+async fn notes_page() -> impl Responder {
+    let html = include_str!("templates/notes.html");
+    HttpResponse::Ok().content_type("text/html").body(html)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
     HttpServer::new(|| {
         App::new()
+            .data(AppState {
+                global_context: Arc::new(Mutex::new(String::new())),
+            })
             .service(home)
             .service(story_page)
             .service(transcribe_page)
             .service(transcribe_audio)
             .service(generate_audio)
+            .service(notes_page)
+            .service(update_context)
+            .service(get_ai_results)
+            .service(search_ai)
             .service(Files::new("/static", "./static"))
     })
     .bind(("127.0.0.1", 8080))?
