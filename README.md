@@ -1,6 +1,6 @@
 ## The Minimal Company
 
-The goal is to release, as open-source, a set of useful tools, some powered by OpenAI.
+The goal is to release, as open-source, a set of useful tools.
 
 ---
 
