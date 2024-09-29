@@ -141,18 +141,25 @@ async function handleCompletion(currentText) {
     showLoadingText();
 
     const globalContext = await fetchGlobalContext();
-    await updateContext(currentText); // Still update input context with the new user input
+    if (globalContext) {
+        console.log("Global context fetched:", globalContext);  // Ensure this logs correctly
+        await updateContext(currentText); // Update with the new user input
 
-    const suggestion = await fetchCompletion();
+        const suggestion = await fetchCompletion();
 
-    if (suggestion) {
-        const textWithoutSlash = currentText.slice(0, -1);  // Remove the trailing "/"
-        markdownInput.value = textWithoutSlash + suggestion;  // Append suggestion to the current input
-        markdownInput.setSelectionRange(markdownInput.value.length, markdownInput.value.length);  // Set cursor at the end
-        markdownInput.focus();
+        if (suggestion) {
+            const textWithoutSlash = currentText.slice(0, -1);  // Remove the trailing "/"
+            markdownInput.value = textWithoutSlash + suggestion;  // Append suggestion
+            markdownInput.setSelectionRange(markdownInput.value.length, markdownInput.value.length);
+            markdownInput.focus();
+        }
+    } else {
+        console.log("No global context available.");
     }
+
     hideLoadingText();
 }
+
 
 
 async function fetchGlobalContext() {

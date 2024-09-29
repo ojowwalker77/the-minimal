@@ -11,7 +11,9 @@ use uuid::Uuid;
 use std::sync::{Arc, Mutex};
 use futures_util::TryStreamExt;
 use std::time::Duration;
-use std::fs::read;
+use std::fs;
+use std::path::Path;
+
 use lopdf::Document;
 
 
@@ -47,14 +49,6 @@ struct AppState {
     input_context: Arc<Mutex<String>>,     // User input context (dynamic)
     uploaded_files: Arc<Mutex<Vec<UploadedFile>>>,
     knowledge_net: Arc<Mutex<Vec<String>>>,
-}#[post("/update-context")]
-async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
-    let mut input_context = state.input_context.lock().unwrap();  // Only update input_context
-    *input_context = form.text.clone();
-
-    log::info!("Updated input context: {:?}", *input_context);
-
-    HttpResponse::Ok().body("Input context updated.")
 }
 
 // Struct to track uploaded files and their status
@@ -64,7 +58,6 @@ struct UploadedFile {
     purpose: String,         // Purpose (e.g., knowledge, style, etc.)
     state: String,           // State (e.g., processing, complete)
 }
-
 
 #[post("/upload-file")]
 async fn upload_file(
@@ -100,11 +93,29 @@ async fn upload_file(
         }
     }
 
+    // Use the filename or default if none found
     let filename = filename.unwrap_or_else(|| format!("file_{}.pdf", Uuid::new_v4()));
-    let file_path = format!("/static/{}", filename);
+    let file_path = format!("./static/{}", filename);  // Use relative path
+
+    // Check if the "static" directory exists, and create it if not
+    let static_dir = Path::new("./static");
+    if !static_dir.exists() {
+        match fs::create_dir_all(static_dir) {
+            Ok(_) => log::info!("Created static directory"),
+            Err(e) => {
+                log::error!("Failed to create static directory: {:?}", e);
+                return HttpResponse::InternalServerError().body("Failed to create directory.");
+            }
+        }
+    }
+
     log::info!("Saving file to: {}", file_path);
 
-    std::fs::write(&file_path, &file_data).expect("Failed to save file");
+    // Save file to disk
+    if let Err(e) = std::fs::write(&file_path, &file_data) {
+        log::error!("Failed to save file: {:?}", e);
+        return HttpResponse::InternalServerError().body(format!("Failed to save file: {}", e));
+    }
 
     // Set the file state to "processing"
     let mut uploaded_files = data.uploaded_files.lock().unwrap();
@@ -121,35 +132,32 @@ async fn upload_file(
     let filename_clone = filename.clone();
 
     actix_web::rt::spawn(async move {
-        log::info!("Starting summarization for file: {}", filename_clone);
-        let summary = process_file_and_summarize(&file_path).await;
+            log::info!("Starting summarization for file: {}", filename_clone);
+            let summary = process_file_and_summarize(&file_path).await;
 
-        if !summary.is_empty() {
-            log::info!("Summarization successful for file: {}", filename_clone);
+            if !summary.is_empty() {
+                log::info!("Summarization successful for file: {}", filename_clone);
 
-            let mut uploaded_files = data_clone.uploaded_files.lock().unwrap();
-            let mut knowledge_net = data_clone.knowledge_net.lock().unwrap();
-            let mut db_context = data_clone.db_context.lock().unwrap();
+                // Update contexts
+                let mut db_context = data_clone.db_context.lock().unwrap();
+                *db_context = format!("{}\n{}", *db_context, summary);
 
-            // Update the db_context with the new summary
-            *db_context = format!("{}\n{}", *db_context, summary);
+                log::info!("Updated db_context with new summary");
 
-            log::info!("Updated db_context with new summary");
-
-            knowledge_net.push(summary.clone());
-
-            // Update the state of the file to 'complete'
-            if let Some(file) = uploaded_files.iter_mut().find(|f| f.filename == filename_clone) {
-                file.state = "complete".to_string();
+                // Mark file as complete
+                let mut uploaded_files = data_clone.uploaded_files.lock().unwrap();
+                if let Some(file) = uploaded_files.iter_mut().find(|f| f.filename == filename_clone) {
+                    file.state = "complete".to_string();
+                }
                 log::info!("File state set to 'complete' for file: {}", filename_clone);
+            } else {
+                log::error!("Summarization failed for file: {}", filename_clone);
             }
-        } else {
-            log::error!("Summarization failed for file: {}", filename_clone);
-        }
-    });
+        });
 
     response
 }
+
 
 
 
@@ -332,12 +340,26 @@ async fn get_global_context(state: web::Data<AppState>) -> impl Responder {
     let db_context = state.db_context.lock().unwrap().clone();
     let input_context = state.input_context.lock().unwrap().clone();
 
-    // Combine db_context and input_context into the global context
     let global_context = format!("{}\n{}", db_context, input_context);
 
-    log::info!("Returning global context: {}", global_context);
+    if global_context.trim().is_empty() {
+        log::info!("No context available.");
+        return HttpResponse::Ok().body("");  // Explicitly return empty if nothing is there
+    }
 
-    HttpResponse::Ok().body(global_context)
+    log::info!("Returning global context:\n{}", global_context);
+    HttpResponse::Ok().body(global_context)  // Return the full global context
+}
+
+
+#[post("/update-context")]
+async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
+    let mut input_context = state.input_context.lock().unwrap();
+    *input_context = form.text.clone();
+
+    log::info!("Updated input context: {:?}", *input_context);
+
+    HttpResponse::Ok().body("Input context updated.")
 }
 
 
@@ -479,15 +501,17 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Starting server...");
 
-    HttpServer::new(|| {
-            App::new()
-                .data(AppState {
-                    db_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty or load from a database
-                    input_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty
-                    uploaded_files: Arc::new(Mutex::new(Vec::new())),
-                    knowledge_net: Arc::new(Mutex::new(Vec::new())),
-                })
+    // Initialize AppState outside the closure
+    let shared_data = web::Data::new(AppState {
+        db_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty or load from a database
+        input_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty
+        uploaded_files: Arc::new(Mutex::new(Vec::new())),
+        knowledge_net: Arc::new(Mutex::new(Vec::new())),
+    });
 
+    HttpServer::new(move || {
+        App::new()
+            .app_data(shared_data.clone())  // Share the same AppState across threads
             .service(home)
             .service(story_page)
             .service(transcribe_page)
