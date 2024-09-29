@@ -35,12 +35,43 @@
             Notes
         </h1>
         <div class="flex flex-row space-x-4">
+            <div class="w-1/4">
+                <!-- MENUS for uploading extra context -->
+                <div class="space-y-4">
+                    <!-- Upload File Section -->
+                    <div>
+                        <label class="block mb-2 text-sm font-medium">Upload File</label>
+                        <input type="file" id="file-upload" class="block w-full text-sm border rounded p-2"/>
+                    </div>
+
+                    <!-- Purpose Dropdown -->
+                    <div>
+                        <label for="file-purpose" class="block mb-2 text-sm font-medium">For what is this file?</label>
+                        <select id="file-purpose" class="block w-full p-2 border rounded">
+                            <option value="knowledge">Extra knowledge</option>
+                            <option value="style">Mirroring style or structure</option>
+                            <option value="analysis">Data analysis</option>
+                        </select>
+                    </div>
+
+                    <!-- Uploaded Files with Status -->
+                    <div id="uploaded-files-section">
+                        <h2 class="text-lg font-medium mb-2">Uploaded Files</h2>
+                        <ul id="uploaded-files-list" class="text-sm space-y-1">
+                            <!-- Dynamic list of uploaded files -->
+                            <li class="text-gray-500">No files uploaded yet</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <div class="w-full">
                 <textarea id="markdown-input" class="w-full p-4 border rounded-lg bg-gray-100 dark:bg-gray-800 text-black dark:text-white" placeholder="Write your notes. Type / to get suggestions"></textarea>
                 <p id="loading-text" class="loading-text text-sm text-gray-500 dark:text-gray-400">Loading...</p>
             </div>
         </div>
-        <footer class="mt-auto">
+
+        <footer class="mt-auto absolute bottom-5">
             <p class="text-xs">© 2024 The Minimal Company</p>
         </footer>
     </div>
@@ -48,69 +79,140 @@
     <script>
         const markdownInput = document.getElementById('markdown-input');
         const loadingText = document.getElementById('loading-text');
+        const uploadedFilesList = document.getElementById('uploaded-files-list');
         let debounceTimer;
         let controller;
 
-        markdownInput.addEventListener('keyup', function(event) {
+        markdownInput.addEventListener('keyup', function (event) {
             const currentText = markdownInput.value;
-            const completionMatch = currentText.match("/");
-            if (completionMatch) {
-                handleCompletion(currentText);
+
+            // Only trigger on the slash ("/")
+            if (currentText.endsWith("/")) {
+                clearTimeout(debounceTimer);
+
+                // Debounce to prevent multiple requests from being fired too quickly
+                debounceTimer = setTimeout(() => {
+                    handleCompletion(currentText);
+                }, 300);  // Adjust the debounce delay as necessary
             }
         });
 
-        async function handleCompletion(currentText) {
-            showLoadingText();
+        const fileInput = document.getElementById('file-upload');
+        const filePurpose = document.getElementById('file-purpose');
 
-            await updateContext(currentText);
+        fileInput.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            const purpose = filePurpose.value;
 
-            const suggestion = await fetchCompletion();
+            if (file) {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("purpose", purpose);
 
-            if (suggestion) {
-                const textWithoutSlash = currentText.slice(0, -2);
-                markdownInput.value = textWithoutSlash + suggestion;
-                markdownInput.setSelectionRange(markdownInput.value.length, markdownInput.value.length);
-                markdownInput.focus();
-            }
-
-            hideLoadingText();
-        }
-
-        async function fetchCompletion() {
-            try {
-                const response = await fetch("/get-ai-results", {
-                    method: "GET"
+                // Send the file and set state to 'processing'
+                const response = await fetch("/upload-file?purpose=" + encodeURIComponent(purpose), {
+                    method: "POST",
+                    body: formData
                 });
 
                 if (response.ok) {
-                    return await response.text();
+                    // Mark as 'processing' immediately
+                    const fileName = file.name;
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `${fileName} - <span class="text-gray-600">Purpose: ${purpose}</span> - <span class="text-yellow-500">Processing...</span>`;
+                    uploadedFilesList.appendChild(listItem);
+
+                    // Wait for the summary to complete (polling or websockets can be used here)
+                    // For now, we simulate this with a timeout
+                    setTimeout(async () => {
+                        // Simulate summary completion (this should be replaced with an actual check)
+                        listItem.innerHTML = `${fileName} - <span class="text-gray-600">Purpose: ${purpose}</span> - <span class="text-green-500">In context</span>`;
+                    }, 5000);  // Simulate processing time
                 } else {
-                    console.error("Error fetching completion.");
-                    return null;
+                    console.error("File upload failed");
                 }
-            } catch (error) {
-                console.error("Error:", error);
+            }
+        });
+
+
+;
+
+async function handleCompletion(currentText) {
+    showLoadingText();
+
+    const globalContext = await fetchGlobalContext();
+    await updateContext(currentText); // Still update input context with the new user input
+
+    const suggestion = await fetchCompletion();
+
+    if (suggestion) {
+        const textWithoutSlash = currentText.slice(0, -1);  // Remove the trailing "/"
+        markdownInput.value = textWithoutSlash + suggestion;  // Append suggestion to the current input
+        markdownInput.setSelectionRange(markdownInput.value.length, markdownInput.value.length);  // Set cursor at the end
+        markdownInput.focus();
+    }
+    hideLoadingText();
+}
+
+
+async function fetchGlobalContext() {
+    try {
+        const response = await fetch("/get-global-context", {
+            method: "GET"
+        });
+
+        if (response.ok) {
+            const result = await response.text();
+            if (result.trim() === "") {
+                console.log("No context available.");
                 return null;
             }
+            return result;
+        } else {
+            console.error("Error fetching global context.");
+            return null;
         }
+    } catch (error) {
+        console.error("Error:", error);
+        return null;
+    }
+}
 
-        async function updateContext(text) {
-            try {
-                const response = await fetch("/update-context", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
-                    body: new URLSearchParams({ text: text })
-                });
 
-                if (!response.ok) {
-                    console.error("Error updating context.");
-                }
-            } catch (error) {
-                console.error("Error updating context:", error);
-            }
+async function fetchCompletion() {
+    try {
+        const response = await fetch("/get-ai-results", {
+            method: "GET"
+        });
+        if (response.ok) {
+            return await response.text();
+        } else {
+            console.error("Error fetching completion.");
+            return null;
         }
+    } catch (error) {
+        console.error("Error:", error);
+        return null;
+    }
+}
+
+async function updateContext(text) {
+    try {
+        const response = await fetch("/update-context", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({ text: text })
+        });
+        if (!response.ok) {
+            console.error("Error updating context.");
+        }
+    } catch (error) {
+        console.error("Error updating context:", error);
+    }
+}
+
 
         function showLoadingText() {
             loadingText.style.display = 'block';
@@ -133,6 +235,5 @@
             localStorage.setItem('theme', newTheme);
         });
     </script>
-
 </body>
 </html>

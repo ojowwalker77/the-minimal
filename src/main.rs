@@ -9,20 +9,22 @@ use dotenv::dotenv;
 use reqwest::Client;
 use uuid::Uuid;
 use std::sync::{Arc, Mutex};
-use comrak::{markdown_to_html, ComrakOptions};
-
 use futures_util::TryStreamExt;
 use std::time::Duration;
+use std::fs::read;
+use lopdf::Document;
+
+
+
+
+
+
 
 #[derive(Deserialize, Serialize)]
 struct TextInput {
     text: String,
 }
 
-#[derive(Clone)]
-struct AppState {
-    global_context: Arc<Mutex<String>>,
-}
 
 #[derive(Deserialize, Serialize, Clone)]
 struct FormData {
@@ -39,6 +41,207 @@ struct BugHistoryEntry {
     task_title: String,
     task_description: String,
 }
+#[derive(Clone)]
+struct AppState {
+    db_context: Arc<Mutex<String>>,        // Static "database" context
+    input_context: Arc<Mutex<String>>,     // User input context (dynamic)
+    uploaded_files: Arc<Mutex<Vec<UploadedFile>>>,
+    knowledge_net: Arc<Mutex<Vec<String>>>,
+}#[post("/update-context")]
+async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
+    let mut input_context = state.input_context.lock().unwrap();  // Only update input_context
+    *input_context = form.text.clone();
+
+    log::info!("Updated input context: {:?}", *input_context);
+
+    HttpResponse::Ok().body("Input context updated.")
+}
+
+// Struct to track uploaded files and their status
+#[derive(Clone, Debug)]
+struct UploadedFile {
+    filename: String,        // Name of the uploaded file
+    purpose: String,         // Purpose (e.g., knowledge, style, etc.)
+    state: String,           // State (e.g., processing, complete)
+}
+
+
+#[post("/upload-file")]
+async fn upload_file(
+    mut payload: Multipart,
+    data: web::Data<AppState>,
+    web::Query(info): web::Query<FilePurpose>
+) -> impl Responder {
+    log::info!("Received file upload request");
+
+    let mut file_data = vec![];
+    let mut filename = None;
+
+    // Collect file data and capture filename
+    while let Ok(Some(mut field)) = payload.try_next().await {
+        log::info!("Reading file chunks");
+
+        // Extract the filename from the content disposition
+        let content_disposition = field.content_disposition();
+        if let Some(name) = content_disposition.get_filename() {
+            filename = Some(name.to_string());
+            log::info!("File name: {}", name);
+        }
+
+        while let Some(chunk) = field.next().await {
+            let data = match chunk {
+                Ok(data) => data,
+                Err(e) => {
+                    log::error!("Error processing file upload: {:?}", e);
+                    return HttpResponse::InternalServerError().body("Error processing file upload.");
+                }
+            };
+            file_data.extend_from_slice(&data);
+        }
+    }
+
+    let filename = filename.unwrap_or_else(|| format!("file_{}.pdf", Uuid::new_v4()));
+    let file_path = format!("/static/{}", filename);
+    log::info!("Saving file to: {}", file_path);
+
+    std::fs::write(&file_path, &file_data).expect("Failed to save file");
+
+    // Set the file state to "processing"
+    let mut uploaded_files = data.uploaded_files.lock().unwrap();
+    uploaded_files.push(UploadedFile {
+        filename: filename.clone(),
+        purpose: info.purpose.clone(),
+        state: "processing".to_string(),
+    });
+    log::info!("File state set to 'processing'");
+
+    let response = HttpResponse::Ok().body(format!("File '{}' uploaded, processing started.", filename));
+
+    let data_clone = data.clone();
+    let filename_clone = filename.clone();
+
+    actix_web::rt::spawn(async move {
+        log::info!("Starting summarization for file: {}", filename_clone);
+        let summary = process_file_and_summarize(&file_path).await;
+
+        if !summary.is_empty() {
+            log::info!("Summarization successful for file: {}", filename_clone);
+
+            let mut uploaded_files = data_clone.uploaded_files.lock().unwrap();
+            let mut knowledge_net = data_clone.knowledge_net.lock().unwrap();
+            let mut db_context = data_clone.db_context.lock().unwrap();
+
+            // Update the db_context with the new summary
+            *db_context = format!("{}\n{}", *db_context, summary);
+
+            log::info!("Updated db_context with new summary");
+
+            knowledge_net.push(summary.clone());
+
+            // Update the state of the file to 'complete'
+            if let Some(file) = uploaded_files.iter_mut().find(|f| f.filename == filename_clone) {
+                file.state = "complete".to_string();
+                log::info!("File state set to 'complete' for file: {}", filename_clone);
+            }
+        } else {
+            log::error!("Summarization failed for file: {}", filename_clone);
+        }
+    });
+
+    response
+}
+
+
+
+
+
+
+fn extract_text_from_pdf(file_path: &str) -> String {
+    let doc = Document::load(file_path).expect("Failed to open PDF file");
+    let mut extracted_text = String::new();
+
+    for page_id in doc.get_pages().keys() {
+        if let Ok(content) = doc.extract_text(&[*page_id]) {
+            extracted_text.push_str(&content);
+        }
+    }
+
+    extracted_text
+}
+
+async fn process_file_and_summarize(file_path: &str) -> String {
+    log::info!("Extracting text from PDF: {}", file_path);
+    let extracted_text = extract_text_from_pdf(file_path);
+
+    if extracted_text.is_empty() {
+        log::error!("Failed to extract text from the PDF");
+        return String::new();
+    }
+    log::info!("Text extracted from PDF: {:?}", extracted_text);
+
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
+    let client = Client::new();
+
+    let messages = vec![
+        serde_json::json!({
+            "role": "system",
+            "content": "You are an assistant tasked with summarizing large documents. Extract key points and provide a concise summary."
+        }),
+        serde_json::json!({
+            "role": "user",
+            "content": format!("The document content is as follows:\n\n{}", extracted_text),
+        })
+    ];
+
+    let payload = serde_json::json!({
+        "model": "gpt-4",
+        "messages": messages,
+        "max_tokens": 300,
+        "temperature": 0.7,
+    });
+
+    log::info!("Sending summarization request to OpenAI API");
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(res) => match res.json::<serde_json::Value>().await {
+            Ok(result) => {
+                let summary = result["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("No summary available.")
+                    .trim()
+                    .to_string();
+                log::info!("Summarization result: {}", summary);
+                summary
+            }
+            Err(e) => {
+                log::error!("Error parsing OpenAI response: {:?}", e);
+                "Error parsing response".to_string()
+            }
+        },
+        Err(e) => {
+            log::error!("Error with OpenAI API request: {:?}", e);
+            "Error with API request".to_string()
+        }
+    }
+}
+
+
+
+
+
+
+// Struct to handle query params (e.g., purpose of file)
+#[derive(Deserialize)]
+struct FilePurpose {
+    purpose: String,
+}
+
 
 const TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
@@ -124,15 +327,20 @@ async fn generate_audio(text_input: web::Json<TextInput>) -> impl Responder {
         .streaming(audio_stream)
 }
 
-#[post("/update-context")]
-async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
-    let mut context = state.global_context.lock().unwrap();
-    *context = form.text.clone();
+#[get("/get-global-context")]
+async fn get_global_context(state: web::Data<AppState>) -> impl Responder {
+    let db_context = state.db_context.lock().unwrap().clone();
+    let input_context = state.input_context.lock().unwrap().clone();
 
-    println!("Updated global context: {:?}", form.text);
+    // Combine db_context and input_context into the global context
+    let global_context = format!("{}\n{}", db_context, input_context);
 
-    HttpResponse::Ok().body("Context updated.")
+    log::info!("Returning global context: {}", global_context);
+
+    HttpResponse::Ok().body(global_context)
 }
+
+
 
 #[post("/search-ai")]
 async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> impl Responder {
@@ -154,7 +362,7 @@ async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> im
     let payload = serde_json::json!({
         "model": "gpt-4",
         "messages": messages,
-        "max_tokens": 80,  // Limit the response to a short summary
+        "max_tokens": 80,
         "temperature": 0.7,
     });
 
@@ -185,11 +393,16 @@ async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> im
 
 #[get("/get-ai-results")]
 async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
-    let context = state.global_context.lock().unwrap().clone();
+    let db_context = state.db_context.lock().unwrap().clone();
+    let input_context = state.input_context.lock().unwrap().clone();
+    let context = format!("{}\n{}", db_context, input_context);
+
 
     if context.is_empty() {
-        return HttpResponse::BadRequest().body("Context is empty.");
+        // Instead of returning a bad request, return an empty string
+        return HttpResponse::Ok().body("");
     }
+
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
     let client = Client::new();
     let messages = vec![
@@ -206,7 +419,7 @@ async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
     let payload = serde_json::json!({
         "model": "gpt-4",
         "messages": messages,
-        "max_tokens": 50,  // Limit response to only a single suggestion
+        "max_tokens": 50,
         "temperature": 1.0,
     });
     let response = client
@@ -219,14 +432,11 @@ async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
     match response {
         Ok(res) => match res.json::<serde_json::Value>().await {
             Ok(result) => {
-                // Extract the suggestion from the GPT-4 response
                 let suggestion = result["choices"][0]["message"]["content"]
                     .as_str()
                     .unwrap_or("No suggestion available.")
                     .trim()
                     .to_string();
-
-                // Return the suggestion as plain text
                 HttpResponse::Ok().body(suggestion)
             }
             Err(_) => HttpResponse::InternalServerError().body("Error parsing response from GPT-4."),
@@ -234,6 +444,7 @@ async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
         Err(_) => HttpResponse::InternalServerError().body("Error calling GPT-4 API."),
     }
 }
+
 
 #[get("/")]
 async fn home() -> impl Responder {
@@ -264,12 +475,19 @@ async fn notes_page() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
+    env_logger::init(); // Initialize logging
+
+    log::info!("Starting server...");
 
     HttpServer::new(|| {
-        App::new()
-            .data(AppState {
-                global_context: Arc::new(Mutex::new(String::new())),
-            })
+            App::new()
+                .data(AppState {
+                    db_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty or load from a database
+                    input_context: Arc::new(Mutex::new(String::new())),  // Initialize as empty
+                    uploaded_files: Arc::new(Mutex::new(Vec::new())),
+                    knowledge_net: Arc::new(Mutex::new(Vec::new())),
+                })
+
             .service(home)
             .service(story_page)
             .service(transcribe_page)
@@ -277,8 +495,10 @@ async fn main() -> std::io::Result<()> {
             .service(generate_audio)
             .service(notes_page)
             .service(update_context)
+            .service(get_global_context)
             .service(get_ai_results)
             .service(search_ai)
+            .service(upload_file)
             .service(Files::new("/static", "./static"))
     })
     .bind(("127.0.0.1", 8080))?
