@@ -10,3 +10,19 @@ Current Features:
 
 Under Development Features:
 - Notes (Smart notepad with seamless assistance).
+
+
+
+To run:
+
+with "nodemon"
+
+```sh
+cargo watch -x run
+```
+
+to get logs:
+
+````sh
+RUST_LOG=info cargo run
+```
