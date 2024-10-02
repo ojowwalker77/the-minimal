@@ -2,7 +2,7 @@ use actix_multipart::Multipart;
 use actix_files::Files;
 use futures_util::stream::StreamExt;
 use async_stream::stream;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, HttpRequest};
 use serde::{Deserialize, Serialize};
 use std::env;
 use dotenv::dotenv;
@@ -14,6 +14,11 @@ use std::time::Duration;
 use std::fs;
 use std::path::Path;
 use lopdf::Document;
+use std::net::SocketAddr;
+use std::collections::HashMap;
+use actix_web::middleware;
+use actix_web::http::header::{HeaderValue, SET_COOKIE};
+use actix_web::dev::{ServiceRequest, Service};
 
 #[derive(Deserialize, Serialize)]
 struct TextInput {
@@ -38,10 +43,10 @@ struct BugHistoryEntry {
 
 #[derive(Clone)]
 struct AppState {
-    db_context: Arc<Mutex<String>>,
-    input_context: Arc<Mutex<String>>,
-    uploaded_files: Arc<Mutex<Vec<UploadedFile>>>,
-    knowledge_net: Arc<Mutex<Vec<String>>>,
+    db_context: Arc<Mutex<HashMap<String, String>>>,
+    input_context: Arc<Mutex<HashMap<String, String>>>,
+    uploaded_files: Arc<Mutex<HashMap<String, Vec<UploadedFile>>>>,
+    knowledge_net: Arc<Mutex<HashMap<String, Vec<String>>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -51,11 +56,19 @@ struct UploadedFile {
     state: String,
 }
 
+#[derive(Deserialize)]
+struct FilePurpose {
+    purpose: String,
+}
+
+const TIMEOUT_DURATION: Duration = Duration::from_secs(30);
+
 #[post("/upload-file")]
 async fn upload_file(
     mut payload: Multipart,
     data: web::Data<AppState>,
     web::Query(info): web::Query<FilePurpose>,
+    req: HttpRequest,
 ) -> impl Responder {
     let mut file_data = vec![];
     let mut filename = None;
@@ -90,8 +103,10 @@ async fn upload_file(
         return HttpResponse::InternalServerError().body("Failed to save file.");
     }
 
+    let session_id = get_session_id(&req);
+
     let mut uploaded_files = data.uploaded_files.lock().unwrap();
-    uploaded_files.push(UploadedFile {
+    uploaded_files.entry(session_id.clone()).or_insert_with(Vec::new).push(UploadedFile {
         filename: filename.clone(),
         purpose: info.purpose.clone(),
         state: "processing".to_string(),
@@ -100,16 +115,21 @@ async fn upload_file(
     let response = HttpResponse::Ok().body(format!("File '{}' uploaded, processing started.", filename));
     let data_clone = data.clone();
     let filename_clone = filename.clone();
+    let session_id_clone = session_id.clone();
+    let file_path_clone = file_path.clone();
 
     actix_web::rt::spawn(async move {
-        let summary = process_file_and_summarize(&file_path).await;
+        let summary = process_file_and_summarize(&file_path_clone).await;
         if !summary.is_empty() {
             let mut db_context = data_clone.db_context.lock().unwrap();
-            *db_context = format!("{}\n{}", *db_context, summary);
+            let context_entry = db_context.entry(session_id_clone.clone()).or_insert_with(String::new);
+            *context_entry = format!("{}\n{}", *context_entry, summary);
 
             let mut uploaded_files = data_clone.uploaded_files.lock().unwrap();
-            if let Some(file) = uploaded_files.iter_mut().find(|f| f.filename == filename_clone) {
-                file.state = "complete".to_string();
+            if let Some(files) = uploaded_files.get_mut(&session_id_clone) {
+                if let Some(file) = files.iter_mut().find(|f| f.filename == filename_clone) {
+                    file.state = "complete".to_string();
+                }
             }
         }
     });
@@ -179,13 +199,6 @@ async fn process_file_and_summarize(file_path: &str) -> String {
         Err(_) => "Error with API request".to_string(),
     }
 }
-
-#[derive(Deserialize)]
-struct FilePurpose {
-    purpose: String,
-}
-
-const TIMEOUT_DURATION: Duration = Duration::from_secs(30);
 
 #[post("/transcribe_audio")]
 async fn transcribe_audio(mut payload: Multipart) -> impl Responder {
@@ -272,28 +285,44 @@ async fn generate_audio(text_input: web::Json<TextInput>) -> impl Responder {
 }
 
 #[get("/get-global-context")]
-async fn get_global_context(state: web::Data<AppState>) -> impl Responder {
-    let db_context = state.db_context.lock().unwrap().clone();
-    let input_context = state.input_context.lock().unwrap().clone();
-    let global_context = format!("{}\n{}", db_context, input_context);
+async fn get_global_context(
+    state: web::Data<AppState>,
+    req: HttpRequest
+) -> impl Responder {
+    let session_id = get_session_id(&req);
+
+    let db_context = state.db_context.lock().unwrap();
+    let input_context = state.input_context.lock().unwrap();
+
+    let global_context = format!(
+        "{}\n{}",
+        db_context.get(&session_id).unwrap_or(&"".to_string()),
+        input_context.get(&session_id).unwrap_or(&"".to_string()),
+    );
 
     if global_context.trim().is_empty() {
         return HttpResponse::Ok().body("");
-
     }
 
     HttpResponse::Ok().body(global_context)
 }
 
 #[post("/update-context")]
-async fn update_context(state: web::Data<AppState>, form: web::Form<TextInput>) -> impl Responder {
+async fn update_context(
+    state: web::Data<AppState>,
+    form: web::Form<TextInput>,
+    req: HttpRequest
+) -> impl Responder {
+    let session_id = get_session_id(&req);
+
     let mut input_context = state.input_context.lock().unwrap();
-    *input_context = form.text.clone();
+    input_context.insert(session_id, form.text.clone());
+
     HttpResponse::Ok().body("Input context updated.")
 }
 
 #[post("/search-ai")]
-async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> impl Responder {
+async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>) -> impl Responder {
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
     let client = Client::new();
     let search_query = form.text.clone();
@@ -340,10 +369,17 @@ async fn search_ai(state: web::Data<AppState>, form: web::Json<TextInput>) -> im
 }
 
 #[get("/get-ai-results")]
-async fn get_ai_results(state: web::Data<AppState>) -> impl Responder {
-    let db_context = state.db_context.lock().unwrap().clone();
-    let input_context = state.input_context.lock().unwrap().clone();
-    let context = format!("{}\n{}", db_context, input_context);
+async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Responder {
+    let session_id = get_session_id(&req);
+
+    let db_context = state.db_context.lock().unwrap();
+    let input_context = state.input_context.lock().unwrap();
+
+    let context = format!(
+        "{}\n{}",
+        db_context.get(&session_id).unwrap_or(&"".to_string()),
+        input_context.get(&session_id).unwrap_or(&"".to_string()),
+    );
 
     if context.is_empty() {
         return HttpResponse::Ok().body("");
@@ -422,16 +458,43 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
 
+    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+
     let shared_data = web::Data::new(AppState {
-        db_context: Arc::new(Mutex::new(String::new())),
-        input_context: Arc::new(Mutex::new(String::new())),
-        uploaded_files: Arc::new(Mutex::new(Vec::new())),
-        knowledge_net: Arc::new(Mutex::new(Vec::new())),
+        db_context: Arc::new(Mutex::new(HashMap::new())),
+        input_context: Arc::new(Mutex::new(HashMap::new())),
+        uploaded_files: Arc::new(Mutex::new(HashMap::new())),
+        knowledge_net: Arc::new(Mutex::new(HashMap::new())),
     });
 
     HttpServer::new(move || {
         App::new()
             .app_data(shared_data.clone())
+            .wrap(middleware::Logger::default())
+            .wrap_fn(|req: ServiceRequest, srv| {
+                let session_id = get_session_id(req.request()).to_string();
+                let cookie_exists = req.cookie("session_id").is_some();
+
+                let fut = srv.call(req);
+
+                async move {
+                    let mut res = fut.await?;
+                    if !cookie_exists {
+                        let cookie = format!(
+                            "session_id={}; HttpOnly; Path=/",
+                            session_id
+                        );
+
+                        res.headers_mut().insert(
+                            SET_COOKIE,
+                            HeaderValue::from_str(&cookie).unwrap(),
+                        );
+                    }
+
+                    Ok(res)
+                }
+            })
             .service(home)
             .service(story_page)
             .service(transcribe_page)
@@ -445,7 +508,16 @@ async fn main() -> std::io::Result<()> {
             .service(upload_file)
             .service(Files::new("/static", "./static"))
     })
-    .bind(("127.0.0.1", 8080))?
+
+    .bind(addr)?
     .run()
     .await
+}
+
+fn get_session_id(req: &HttpRequest) -> String {
+    if let Some(cookie) = req.cookie("session_id") {
+        cookie.value().to_string()
+    } else {
+        uuid::Uuid::new_v4().to_string()
+    }
 }
