@@ -42,11 +42,18 @@
             color: #1F2937;
         }
 
-        .theme-toggle {
+        #themeToggle {
             position: absolute;
             top: 1rem;
             right: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
             cursor: pointer;
+        }
+
+        #themeIcon {
+            width: 24px;
+            height: 24px;
         }
 
         body.light-mode #transcription {
@@ -96,9 +103,10 @@
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 light-mode">
-    <button id="themeToggle" class="theme-toggle">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1M12 21v1M4.22 4.22l.71.71M19.07 19.07l.71.71M1 12h1M21 12h1M4.22 19.78l.71-.71M19.07 4.93l.71-.71M12 5a7 7 0 100 14 7 7 0 000-14z" />
+    <button id="themeToggle" class="absolute top-4 right-4 p-2 rounded-md focus:outline-none">
+        <!-- Old Light/Dark Mode Icon -->
+        <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <!-- Icon path will be set dynamically -->
         </svg>
     </button>
 
@@ -125,40 +133,62 @@
             Your browser does not support the audio element.
         </audio>
     </div>
-
-
-    <footer class="mt-auto absolute bottom-5 center w-full text-center">
-        <p class="text-xs">© 2024 The Minimal Company - <span class="text-[0.625rem]">v0.5.0</span></p>
-    </footer>
-
     <script>
-        const transcribeBtn = document.getElementById("transcribe-btn");
-        const spinner = document.getElementById("spinner");
-        const transcribeText = document.getElementById("transcribe-text");
-        const transcriptionDiv = document.getElementById("transcription");
-        const audioFileInput = document.getElementById("audio-file");
+
+
+    function initializeTheme() {
         const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
         const body = document.body;
         const savedTheme = localStorage.getItem('theme') || 'light-mode';
+
         body.classList.add(savedTheme);
+        setThemeIcon(body, themeIcon);
 
-        if (savedTheme === 'dark-mode') {
-            transcribeBtn.classList.add('dark-mode');
-        }
-
+        // Theme Toggle Event
         themeToggle.addEventListener('click', () => {
             const currentTheme = body.classList.contains('light-mode') ? 'light-mode' : 'dark-mode';
             const newTheme = currentTheme === 'light-mode' ? 'dark-mode' : 'light-mode';
+
             body.classList.remove(currentTheme);
             body.classList.add(newTheme);
             localStorage.setItem('theme', newTheme);
 
-            if (newTheme === 'dark-mode') {
-                transcribeBtn.classList.add('dark-mode');
-            } else {
-                transcribeBtn.classList.remove('dark-mode');
-            }
+            setThemeIcon(body, themeIcon);
         });
+    }
+
+    // Function to set the theme icon based on the current theme
+    function setThemeIcon(body, themeIcon) {
+        if (body.classList.contains('dark-mode')) {
+            // Dark mode icon (moon)
+            themeIcon.innerHTML = `
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17.293 13.293A8 8 0 116.707 2.707
+                    8 8 0 0017.293 13.293z" />
+            `;
+        } else {
+            // Light mode icon (sun)
+            themeIcon.innerHTML = `
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 3v1m0 16v1M4.22 4.22l.71.71
+                    M19.07 19.07l.71.71M1 12h1M21 12h1
+                    M4.22 19.78l.71-.71M19.07 4.93l.71-.71
+                    M12 5a7 7 0 100 14 7 7 0 000-14z" />
+            `;
+        }
+    }
+
+    // Initialize theme when the DOM content is loaded
+    document.addEventListener('DOMContentLoaded', initializeTheme);
+
+    const transcribeBtn = document.getElementById("transcribe-btn");
+    const spinner = document.getElementById("spinner");
+    const transcribeText = document.getElementById("transcribe-text");
+    const transcriptionDiv = document.getElementById("transcription");
+    const audioFileInput = document.getElementById("audio-file");
+
+
 
         function showSpinner() {
             spinner.classList.remove("hidden");

@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Notes</title>
+    <!-- Tailwind CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.0.0/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Custom Styles -->
     <style>
         #markdown-input {
             resize: none;
@@ -23,10 +25,10 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }
         }
 
+        /* Light and Dark Mode Styles */
         body.light-mode {
             background-color: #F9FAFB;
             color: #1F2937;
@@ -39,22 +41,22 @@
             letter-spacing: 0.05em;
         }
 
-        .bg-black.light-mode {
-            background-color: #1F2937;
-        }
-
-        .bg-black.dark-mode {
-            background-color: #0B0C10;
-            color: #1F2937;
-        }
-
-        .theme-toggle {
+        /* Theme Toggle Button */
+        #themeToggle {
             position: absolute;
             top: 1rem;
             right: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
             cursor: pointer;
         }
 
+        #themeIcon {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Textarea Styles */
         body.light-mode #markdown-input {
             background-color: #fff;
             color: #000;
@@ -67,6 +69,7 @@
             border: 1px solid #4B5563;
         }
 
+        /* Loading Text */
         .loading-text {
             font-style: italic;
             display: none;
@@ -74,6 +77,7 @@
             color: #6B7280;
         }
 
+        /* Button Styles */
         .btn {
             background-color: #333;
             color: white;
@@ -84,6 +88,12 @@
             display: inline-block;
         }
 
+        body.dark-mode .btn {
+            background-color: #C5C6C7;
+            color: #0B0C10;
+        }
+
+        /* Tooltip Styles */
         .tooltip {
             position: relative;
             display: inline-block;
@@ -112,12 +122,14 @@
             opacity: 1;
         }
 
+        /* Info Text */
         .info-text {
             color: #6B7280;
             font-size: 0.875rem;
             margin-bottom: 1rem;
         }
 
+        /* Uploaded Files Section */
         #uploaded-files-section h2 {
             color: #6B7280;
         }
@@ -131,46 +143,66 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 light-mode">
-    <button id="themeToggle" class="theme-toggle">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1M12 21v1M4.22 4.22l.71.71M19.07 19.07l.71.71M1 12h1M21 12h1M4.22 19.78l.71-.71M19.07 4.93l.71-.71M12 5a7 7 0 100 14 7 7 0 000-14z" />
+<body class="light-mode">
+    <!-- Theme Toggle Button -->
+    <button id="themeToggle" class="absolute top-4 right-4 p-2 rounded-md focus:outline-none">
+        <!-- Light/Dark Mode Icon -->
+        <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <!-- Icon path will be set dynamically -->
         </svg>
     </button>
 
     <div class="container mx-auto h-full flex flex-col">
+        <!-- Header -->
         <h1 class="text-3xl font-bold mb-8 mt-6 flex items-center">
             <a href="/" class="mr-4">
                 <h2 class="text-2xl font-bold">&lt;</h2>
             </a>
             Notes
         </h1>
+
         <div class="flex flex-row space-x-4">
-                    <div class="w-1/4 file-upload-section">
-                        <p class="info-text">Enhance your writing suggestions by uploading related documents.</p>
-                        <div class="tooltip">
-                            <button id="upload-btn" class="btn w-full mb-4">Upload Document</button>
-                            <span class="tooltiptext">Upload documents to provide additional context for AI suggestions.</span>
-                        </div>
-                        <div id="uploaded-files-section">
-                            <h2 class="text-lg font-medium mb-2">Uploaded Files</h2>
-                            <ul id="uploaded-files-list" class="text-sm space-y-1">
-                            </ul>
-                        </div>
-                    </div>
+            <!-- File Upload Section -->
+            <div class="w-1/4 file-upload-section">
+                <p class="info-text">Enhance your writing suggestions by uploading related documents.</p>
+                <div class="tooltip">
+                    <button id="upload-btn" class="btn w-full mb-4">Upload Document</button>
+                    <span class="tooltiptext">Upload documents to provide additional context for AI suggestions.</span>
+                </div>
+                <div id="uploaded-files-section">
+                    <h2 class="text-lg font-medium mb-2">Uploaded Files</h2>
+                    <ul id="uploaded-files-list" class="text-sm space-y-1">
+                    </ul>
+                </div>
+            </div>
 
-            <div class="w-full relative">
-                            <textarea id="markdown-input" class="w-full p-4 border rounded-lg mb-4 bg-gray-100 dark:bg-gray-800 text-black dark:text-white" placeholder="Write your notes. Type / to get suggestions"></textarea>
-                            <p id="loading-text" class="loading-text text-sm">Loading...</p>
-                        </div>
+            <!-- Text Input Area -->
+            <div class="w-3/4 relative">
+                <textarea id="markdown-input" class="w-full p-4 border rounded-lg mb-4" placeholder="Write your notes. Type / to get suggestions"></textarea>
+                <p id="loading-text" class="loading-text text-sm">Loading...</p>
+            </div>
         </div>
-
-        <footer class="mt-auto absolute bottom-5 center w-full text-center">
-            <p class="text-xs">© 2024 The Minimal Company - <span class="text-[0.625rem]">v0.5.0</span></p>
-        </footer>
     </div>
 
+    <!-- Script -->
     <script>
+        // Session ID Management
+        let sessionId = sessionStorage.getItem('session_id');
+        if (!sessionId) {
+            sessionId = self.crypto.randomUUID();
+            sessionStorage.setItem('session_id', sessionId);
+        }
+
+        function addSessionIdToHeaders(headers = {}) {
+            headers['X-Session-ID'] = sessionId;
+            return headers;
+        }
+
+        window.addEventListener('beforeunload', function () {
+            navigator.sendBeacon('/close_session', '');
+        });
+
+        // Elements
         const markdownInput = document.getElementById('markdown-input');
         const loadingText = document.getElementById('loading-text');
         const uploadedFilesList = document.getElementById('uploaded-files-list');
@@ -189,61 +221,51 @@
         });
 
         const uploadBtn = document.getElementById('upload-btn');
-        const fileInput = document.getElementById('file-upload');
-
-
-        if (!fileInput) {
-                   const hiddenFileInput = document.createElement('input');
-                   hiddenFileInput.type = 'file';
-                   hiddenFileInput.id = 'file-upload';
-                   hiddenFileInput.classList.add('hidden');
-                   document.body.appendChild(hiddenFileInput);
-               }
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'file-upload';
+        fileInput.classList.add('hidden');
+        document.body.appendChild(fileInput);
 
         uploadBtn.addEventListener('click', function () {
-                   document.getElementById('file-upload').click();
-               });
+            fileInput.click();
+        });
 
+        fileInput.addEventListener('change', async function (event) {
+            const file = event.target.files[0];
 
-        document.getElementById('file-upload').addEventListener('change', async function (event) {
-                   const file = event.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append("file", file);
+                const purpose = 'knowledge';
 
-                   if (file) {
-                       const formData = new FormData();
-                       formData.append("file", file);
-                       const purpose = 'knowledge';
+                const response = await fetch("/upload-file?purpose=" + encodeURIComponent(purpose), {
+                    method: "POST",
+                    headers: addSessionIdToHeaders(),
+                    body: formData
+                });
 
-                       const response = await fetch("/upload-file?purpose=" + encodeURIComponent(purpose), {
-                           method: "POST",
-                           body: formData
-                       });
+                if (response.ok) {
+                    const fileName = file.name;
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `${fileName} - <span class="text-gray-600">Processing...</span>`;
+                    uploadedFilesList.appendChild(listItem);
 
-                       if (response.ok) {
-                           const fileName = file.name;
-                           const listItem = document.createElement('li');
-                           listItem.innerHTML = `${fileName} - <span class="text-gray-600">Processing...</span>`;
-                           uploadedFilesList.appendChild(listItem);
-
-                           const checkProcessing = setInterval(async () => {
-                               const isProcessingComplete = true;
-
-                               if (isProcessingComplete) {
-                                   clearInterval(checkProcessing);
-                                   listItem.innerHTML = `${fileName} - <span class="text-green-500">Ready</span>`;
-                               }
-                           }, 2000);
-                       } else {
-                           console.error("File upload failed");
-                       }
-                   }
-               });
+                    // Simulate processing completion
+                    setTimeout(() => {
+                        listItem.innerHTML = `${fileName} - <span class="text-green-500">Ready</span>`;
+                    }, 5000);
+                } else {
+                    console.error("File upload failed");
+                }
+            }
+        });
 
         async function handleCompletion(currentText) {
             showLoadingText();
 
             const globalContext = await fetchGlobalContext();
-            if (globalContext) {
-                console.log("Global context fetched:", globalContext);
+            if (globalContext !== null) {
                 await updateContext(currentText);
 
                 const suggestion = await fetchCompletion();
@@ -264,15 +286,12 @@
         async function fetchGlobalContext() {
             try {
                 const response = await fetch("/get-global-context", {
-                    method: "GET"
+                    method: "GET",
+                    headers: addSessionIdToHeaders(),
                 });
 
                 if (response.ok) {
                     const result = await response.text();
-                    //if (result.trim() === "") {
-                    //    console.log("No context available.");
-                    //    return null;
-                    //}
                     return result;
                 } else {
                     console.error("Error fetching global context.");
@@ -287,7 +306,8 @@
         async function fetchCompletion() {
             try {
                 const response = await fetch("/get-ai-results", {
-                    method: "GET"
+                    method: "GET",
+                    headers: addSessionIdToHeaders(),
                 });
                 if (response.ok) {
                     return await response.text();
@@ -305,9 +325,9 @@
             try {
                 const response = await fetch("/update-context", {
                     method: "POST",
-                    headers: {
+                    headers: addSessionIdToHeaders({
                         "Content-Type": "application/x-www-form-urlencoded",
-                    },
+                    }),
                     body: new URLSearchParams({ text: text })
                 });
                 if (!response.ok) {
@@ -326,17 +346,55 @@
             loadingText.style.display = 'none';
         }
 
-        const themeToggle = document.getElementById('themeToggle');
-        const body = document.body;
-        const savedTheme = localStorage.getItem('theme') || 'light-mode';
-        body.classList.add(savedTheme);
+        function initializeTheme() {
+            const themeToggle = document.getElementById('themeToggle');
+            const themeIcon = document.getElementById('themeIcon');
+            const body = document.body;
+            const savedTheme = localStorage.getItem('theme') || 'light-mode';
 
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = body.classList.contains('light-mode') ? 'light-mode' : 'dark-mode';
-            const newTheme = currentTheme === 'light-mode' ? 'dark-mode' : 'light-mode';
-            body.classList.remove(currentTheme);
-            body.classList.add(newTheme);
-            localStorage.setItem('theme', newTheme);
+            body.classList.add(savedTheme);
+            setThemeIcon();
+
+            // Theme Toggle Event
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = body.classList.contains('light-mode') ? 'light-mode' : 'dark-mode';
+                const newTheme = currentTheme === 'light-mode' ? 'dark-mode' : 'light-mode';
+
+                body.classList.remove(currentTheme);
+                body.classList.add(newTheme);
+                localStorage.setItem('theme', newTheme);
+
+                setThemeIcon();
+            });
+        }
+
+        function setThemeIcon() {
+            const body = document.body;
+            const themeIcon = document.getElementById('themeIcon');
+
+            if (body.classList.contains('dark-mode')) {
+                // Dark mode icon (moon)
+                themeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17.293 13.293A8 8 0 116.707 2.707
+                        8 8 0 0017.293 13.293z" />
+                `;
+            } else {
+                // Light mode icon (sun)
+                themeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 3v1m0 16v1M4.22 4.22l.71.71
+                        M19.07 19.07l.71.71M1 12h1M21 12h1
+                        M4.22 19.78l.71-.71M19.07 4.93l.71-.71
+                        M12 5a7 7 0 100 14 7 7 0 000-14z" />
+                `;
+            }
+        }
+
+        // Initialize theme and other settings when the DOM content is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTheme();
+            // Any other initialization code
         });
     </script>
 </body>

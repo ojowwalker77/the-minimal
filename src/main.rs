@@ -3,42 +3,25 @@ use actix_files::Files;
 use futures_util::stream::StreamExt;
 use async_stream::stream;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, HttpRequest};
+use actix_web::middleware;
 use serde::{Deserialize, Serialize};
-use std::env;
 use dotenv::dotenv;
+use futures_util::TryStreamExt;
 use reqwest::Client;
 use uuid::Uuid;
-use std::sync::{Arc, Mutex};
-use futures_util::TryStreamExt;
+use std::env;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::time::Duration;
 use std::fs;
 use std::path::Path;
 use lopdf::Document;
 use std::net::SocketAddr;
 use std::collections::HashMap;
-use actix_web::middleware;
-use actix_web::http::header::{HeaderValue, SET_COOKIE};
-use actix_web::dev::{ServiceRequest, Service};
 
 #[derive(Deserialize, Serialize)]
 struct TextInput {
     text: String,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-struct FormData {
-    job_title: String,
-    task_title: String,
-    task_description: String,
-    additional_data: Option<String>,
-    mood: String,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-struct BugHistoryEntry {
-    job_title: String,
-    task_title: String,
-    task_description: String,
 }
 
 #[derive(Clone)]
@@ -103,9 +86,12 @@ async fn upload_file(
         return HttpResponse::InternalServerError().body("Failed to save file.");
     }
 
-    let session_id = get_session_id(&req);
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
 
-    let mut uploaded_files = data.uploaded_files.lock().unwrap();
+    let mut uploaded_files = data.uploaded_files.lock().await;
     uploaded_files.entry(session_id.clone()).or_insert_with(Vec::new).push(UploadedFile {
         filename: filename.clone(),
         purpose: info.purpose.clone(),
@@ -121,11 +107,11 @@ async fn upload_file(
     actix_web::rt::spawn(async move {
         let summary = process_file_and_summarize(&file_path_clone).await;
         if !summary.is_empty() {
-            let mut db_context = data_clone.db_context.lock().unwrap();
+            let mut db_context = data_clone.db_context.lock().await;
             let context_entry = db_context.entry(session_id_clone.clone()).or_insert_with(String::new);
             *context_entry = format!("{}\n{}", *context_entry, summary);
 
-            let mut uploaded_files = data_clone.uploaded_files.lock().unwrap();
+            let mut uploaded_files = data_clone.uploaded_files.lock().await;
             if let Some(files) = uploaded_files.get_mut(&session_id_clone) {
                 if let Some(file) = files.iter_mut().find(|f| f.filename == filename_clone) {
                     file.state = "complete".to_string();
@@ -201,7 +187,12 @@ async fn process_file_and_summarize(file_path: &str) -> String {
 }
 
 #[post("/transcribe_audio")]
-async fn transcribe_audio(mut payload: Multipart) -> impl Responder {
+async fn transcribe_audio(mut payload: Multipart, req: HttpRequest) -> impl Responder {
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
+
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
     let mut file_data = vec![];
 
@@ -252,7 +243,12 @@ async fn transcribe_audio(mut payload: Multipart) -> impl Responder {
 }
 
 #[post("/generate_audio")]
-async fn generate_audio(text_input: web::Json<TextInput>) -> impl Responder {
+async fn generate_audio(text_input: web::Json<TextInput>, req: HttpRequest) -> impl Responder {
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
+
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
     let client = Client::new();
     let api_url = "https://api.openai.com/v1/audio/speech";
@@ -287,12 +283,15 @@ async fn generate_audio(text_input: web::Json<TextInput>) -> impl Responder {
 #[get("/get-global-context")]
 async fn get_global_context(
     state: web::Data<AppState>,
-    req: HttpRequest
+    req: HttpRequest,
 ) -> impl Responder {
-    let session_id = get_session_id(&req);
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
 
-    let db_context = state.db_context.lock().unwrap();
-    let input_context = state.input_context.lock().unwrap();
+    let db_context = state.db_context.lock().await;
+    let input_context = state.input_context.lock().await;
 
     let global_context = format!(
         "{}\n{}",
@@ -311,18 +310,26 @@ async fn get_global_context(
 async fn update_context(
     state: web::Data<AppState>,
     form: web::Form<TextInput>,
-    req: HttpRequest
+    req: HttpRequest,
 ) -> impl Responder {
-    let session_id = get_session_id(&req);
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
 
-    let mut input_context = state.input_context.lock().unwrap();
+    let mut input_context = state.input_context.lock().await;
     input_context.insert(session_id, form.text.clone());
 
     HttpResponse::Ok().body("Input context updated.")
 }
 
 #[post("/search-ai")]
-async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>) -> impl Responder {
+async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>, req: HttpRequest) -> impl Responder {
+    let _session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
+
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
     let client = Client::new();
     let search_query = form.text.clone();
@@ -370,10 +377,13 @@ async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>) -> i
 
 #[get("/get-ai-results")]
 async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Responder {
-    let session_id = get_session_id(&req);
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
 
-    let db_context = state.db_context.lock().unwrap();
-    let input_context = state.input_context.lock().unwrap();
+    let db_context = state.db_context.lock().await;
+    let input_context = state.input_context.lock().await;
 
     let context = format!(
         "{}\n{}",
@@ -429,6 +439,35 @@ async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Re
     }
 }
 
+#[post("/close_session")]
+async fn close_session(
+    state: web::Data<AppState>,
+    req: HttpRequest,
+    _body: web::Bytes,
+) -> impl Responder {
+    let session_id = match get_session_id(&req) {
+        Some(id) => id,
+        None => return HttpResponse::BadRequest().body("Missing session ID"),
+    };
+
+    // Remove session data
+    {
+        let mut db_context = state.db_context.lock().await;
+        db_context.remove(&session_id);
+    }
+    {
+        let mut input_context = state.input_context.lock().await;
+        input_context.remove(&session_id);
+    }
+    {
+        let mut uploaded_files = state.uploaded_files.lock().await;
+        uploaded_files.remove(&session_id);
+    }
+    // Remove any other session-specific data as needed
+
+    HttpResponse::Ok().body("Session closed")
+}
+
 #[get("/")]
 async fn home() -> impl Responder {
     let html = include_str!("templates/home.html");
@@ -436,7 +475,7 @@ async fn home() -> impl Responder {
 }
 
 #[get("/speech")]
-async fn story_page() -> impl Responder {
+async fn speech_page() -> impl Responder {
     let html = include_str!("templates/speech.html");
     HttpResponse::Ok().content_type("text/html").body(html)
 }
@@ -472,52 +511,30 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(shared_data.clone())
             .wrap(middleware::Logger::default())
-            .wrap_fn(|req: ServiceRequest, srv| {
-                let session_id = get_session_id(req.request()).to_string();
-                let cookie_exists = req.cookie("session_id").is_some();
-
-                let fut = srv.call(req);
-
-                async move {
-                    let mut res = fut.await?;
-                    if !cookie_exists {
-                        let cookie = format!(
-                            "session_id={}; HttpOnly; Path=/",
-                            session_id
-                        );
-
-                        res.headers_mut().insert(
-                            SET_COOKIE,
-                            HeaderValue::from_str(&cookie).unwrap(),
-                        );
-                    }
-
-                    Ok(res)
-                }
-            })
+            // Removed cookie-based session middleware
             .service(home)
-            .service(story_page)
+            .service(speech_page)
             .service(transcribe_page)
+            .service(notes_page)
             .service(transcribe_audio)
             .service(generate_audio)
-            .service(notes_page)
             .service(update_context)
             .service(get_global_context)
             .service(get_ai_results)
             .service(search_ai)
             .service(upload_file)
+            .service(close_session)
             .service(Files::new("/static", "./static"))
     })
-
     .bind(addr)?
     .run()
     .await
 }
 
-fn get_session_id(req: &HttpRequest) -> String {
-    if let Some(cookie) = req.cookie("session_id") {
-        cookie.value().to_string()
+fn get_session_id(req: &HttpRequest) -> Option<String> {
+    if let Some(header_value) = req.headers().get("X-Session-ID") {
+        header_value.to_str().ok().map(|s| s.to_string())
     } else {
-        uuid::Uuid::new_v4().to_string()
+        None
     }
 }

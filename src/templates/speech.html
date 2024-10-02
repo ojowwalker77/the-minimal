@@ -4,49 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Speech</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.0.0/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.7/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Custom Styles -->
     <style>
-        .play-btn-icon, .pause-btn-icon {
-            width: 24px;
-            height: 24px;
+        textarea::-webkit-scrollbar {
+            width: 8px;
         }
-        .playback-speed-btn {
-            background-color: #333;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
+        textarea::-webkit-scrollbar-thumb {
+            background-color: #9CA3AF;
+            border-radius: 4px;
         }
-        #text-input {
-            resize: none;
-            height: calc(100vh - 250px);
-            position: relative;
-        }
-        #progress-bar {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            height: 8px;
-            background-color: #000;
-            border-radius: 5px;
-            outline: none;
-        }
-        #progress-bar::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            background-color: #fff;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        #progress-bar::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            background-color: #fff;
-            border-radius: 50%;
-            cursor: pointer;
-        }
+        /* Spinner animation */
         .spinner {
             border: 4px solid black;
             border-top: 4px solid #ffffff;
@@ -57,9 +26,13 @@
             margin: 0 auto;
         }
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }
         }
+        /* Over-limit textarea border */
+        .over-limit {
+            border-color: red !important;
+        }
+        /* Light and Dark Mode Styles */
         body.light-mode {
             background-color: #F9FAFB;
             color: #1F2937;
@@ -70,31 +43,27 @@
             color: #C5C6C7;
             letter-spacing: 0.05em;
         }
-        .bg-black.light-mode {
-            background-color: #1F2937;
+        /* Button Styles */
+        .btn {
+            background-color: #333;
+            color: white;
         }
-        .bg-black.dark-mode {
-            background-color: #0B0C10;
-            color: #1F2937;
+        body.dark-mode .btn {
+            background-color: white;
+            color: black;
         }
-        .theme-toggle {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            cursor: pointer;
-        }
+        /* Textarea Styles */
         body.light-mode #text-input {
             background-color: #fff;
             color: #000;
             border: 1px solid #ccc;
         }
-
         body.dark-mode #text-input {
             background-color: #0B0C10;
             color: #C5C6C7;
             border: 1px solid #4B5563;
         }
-
+        /* Character Counter */
         .character-counter {
             position: absolute;
             bottom: 8px;
@@ -102,59 +71,131 @@
             font-size: 12px;
             color: #6B7280;
         }
+        /* Progress Bar Styles */
+        #progress-bar {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background-color: #D1D5DB;
+            border-radius: 5px;
+            outline: none;
+        }
+        #progress-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background-color: #1F2937;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        #progress-bar::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background-color: #1F2937;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        body.dark-mode #progress-bar {
+            background-color: #4B5563;
+        }
+        body.dark-mode #progress-bar::-webkit-slider-thumb {
+            background-color: #C5C6C7;
+        }
+        body.dark-mode #progress-bar::-moz-range-thumb {
+            background-color: #C5C6C7;
+        }
+        /* Custom-Audio-Controls Styles */
+        #custom-audio-controls {
+            background-color: #F3F4F6; /* Light mode background */
+            color: #1F2937; /* Light mode text color */
+            /* Removed absolute positioning */
+        }
+        body.dark-mode #custom-audio-controls {
+            background-color: #0B0C10; /* Dark mode background */
+            color: #D1D5DB; /* Dark mode text color */
+        }
 
-        /* If the text exceeds the limit, change the border color to red */
-        .over-limit {
-            border-color: red !important;
+        #themeToggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+        }
+
+        #themeIcon {
+            width: 24px;
+            height: 24px;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
-    <button id="themeToggle" class="theme-toggle">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1M12 21v1M4.22 4.22l.71.71M19.07 19.07l.71.71M1 12h1M21 12h1M4.22 19.78l.71-.71M19.07 4.93l.71-.71M12 5a7 7 0 100 14 7 7 0 000-14z" />
+<body class="light-mode transition-colors duration-300">
+    <!-- Theme Toggle Button -->
+    <button id="themeToggle" class="absolute top-4 right-4 p-2 rounded-md focus:outline-none">
+        <!-- Old Light/Dark Mode Icon -->
+        <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <!-- Icon path will be set dynamically -->
         </svg>
     </button>
-    <div class="container mx-auto h-full flex flex-col">
-        <h1 class="text-3xl font-bold mb-8 mt-6 flex items-center">
-            <a href="/" class="mr-4">
+
+    <div class="container mx-auto h-screen flex flex-col px-4 py-8">
+        <!-- Header -->
+        <div class="flex items-center mb-4 flex-shrink-0">
+            <a href="/" class="text-gray-600 hover:text-gray-800 mr-4">
                 <h2 class="text-2xl font-bold">&lt;</h2>
             </a>
-            Speech
-        </h1>
-
-        <!-- Text input with character counter -->
-        <div class="relative">
-            <textarea id="text-input" class="w-full p-4 border rounded-lg mb-4 bg-gray-100 dark:bg-gray-800 text-black dark:text-white" placeholder="Paste your text here..."></textarea>
+            <h1 class="text-3xl font-bold">Speech</h1>
         </div>
-        <span id="char-counter" class="character-counter mt-5">0/2000</span> <!-- Character counter -->
 
-        <div id="custom-audio-controls" class="w-full flex items-center justify-between p-4">
-            <span id="current-time" class="mr-4">00:00</span>
+        <!-- Text Input Area -->
+        <div class="relative mb-4 flex-grow">
+            <textarea id="text-input" class="w-full h-full p-4 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Paste your text here..."></textarea>
+            <!-- Character Counter -->
+            <span id="char-counter" class="character-counter">0/2000</span>
+        </div>
+
+        <!-- Audio Controls -->
+        <div id="custom-audio-controls" class="flex items-center justify-between p-4 rounded-lg shadow-md flex-shrink-0">
+            <!-- Current Time -->
+            <span id="current-time" class="text-sm font-mono">00:00</span>
+            <!-- Progress Bar -->
             <div class="flex-1 mx-4">
-                <input id="progress-bar" type="range" value="0" max="100" class="w-full" />
+                <input id="progress-bar" type="range" value="0" max="100" />
             </div>
-            <span id="total-duration" class="ml-4 mr-4">00:00</span>
-            <button id="play-btn" class="bg-black text-white px-4 py-2 rounded-lg flex items-center justify-center" disabled>
-                <svg class="play-btn-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <!-- Total Duration -->
+            <span id="total-duration" class="text-sm font-mono">00:00</span>
+            <!-- Playback Speed -->
+            <button id="playback-speed-btn" class="ml-4 text-sm hover:text-blue-500 focus:outline-none">1x</button>
+            <!-- Play Button -->
+            <button id="play-btn" class="btn ml-4 p-2 rounded-full hover:bg-gray-800 focus:outline-none" disabled>
+                <svg class="h-6 w-6 play-btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path d="M5 3l14 9-14 9V3z" /> <!-- Play Icon -->
                 </svg>
             </button>
-            <button id="pause-btn" class="bg-black text-white px-4 py-2 rounded-lg flex items-center justify-center hidden">
-                <svg class="pause-btn-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <!-- Pause Button -->
+            <button id="pause-btn" class="btn ml-4 p-2 rounded-full hover:bg-gray-800 focus:outline-none hidden">
+                <svg class="h-6 w-6 pause-btn-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/> <!-- Pause Icon -->
                 </svg>
             </button>
-            <button id="playback-speed-btn" class="playback-speed-btn mx-4">1x</button>
-            <button id="generate-btn" class="bg-black text-white py-3 rounded-lg hover:bg-gray-800 w-48" disabled>Generate Audio</button>
+            <!-- Generate Audio Button -->
+            <button id="generate-btn" class="btn ml-4 px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none disabled:opacity-50" disabled>Generate Audio</button>
         </div>
+
+        <!-- Hidden Audio Element -->
         <audio id="audio-player" class="hidden">
             <source id="audio-source" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
     </div>
 
+
+    <!-- Script -->
     <script>
+        // Constants and Elements
         const MAX_CHAR_LIMIT = 2000;
         const textInput = document.getElementById("text-input");
         const charCounter = document.getElementById("char-counter");
@@ -167,50 +208,72 @@
         const currentTimeElem = document.getElementById("current-time");
         const totalDurationElem = document.getElementById("total-duration");
         const playbackSpeedBtn = document.getElementById("playback-speed-btn");
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const body = document.body;
 
-        let playbackSpeeds = [1, 1.5, 2, 3];
+        let playbackSpeeds = [1, 1.25, 1.5, 2];
         let currentSpeedIndex = 0;
 
-        // Update character counter and enable/disable "Generate" button
-        textInput.addEventListener("input", function () {
-            const currentLength = textInput.value.length;
-            charCounter.textContent = `${currentLength}/${MAX_CHAR_LIMIT}`;
-
-            if (currentLength > MAX_CHAR_LIMIT) {
-                textInput.classList.add("over-limit");
-                generateBtn.disabled = true; // Disable button if over limit
-            } else {
-                textInput.classList.remove("over-limit");
-                generateBtn.disabled = false; // Enable button if within limit
-            }
-        });
-
-        const themeToggle = document.getElementById('themeToggle');
-        const body = document.body;
+        // Theme Initialization
         const savedTheme = localStorage.getItem('theme') || 'light-mode';
         body.classList.add(savedTheme);
+        setThemeIcon();
 
+        // Theme Toggle Event
         themeToggle.addEventListener('click', () => {
             const currentTheme = body.classList.contains('light-mode') ? 'light-mode' : 'dark-mode';
             const newTheme = currentTheme === 'light-mode' ? 'dark-mode' : 'light-mode';
             body.classList.remove(currentTheme);
             body.classList.add(newTheme);
             localStorage.setItem('theme', newTheme);
+            setThemeIcon();
         });
 
+        function setThemeIcon() {
+            if (body.classList.contains('dark-mode')) {
+                // Dark mode icon (moon)
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.293 13.293A8 8 0 116.707 2.707 8 8 0 0017.293 13.293z" />`;
+            } else {
+                // Light mode icon (sun)
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1M4.22 4.22l.71.71M19.07 19.07l.71.71M1 12h1M21 12h1M4.22 19.78l.71-.71M19.07 4.93l.71-.71M12 5a7 7 0 100 14 7 7 0 000-14z" />`;
+            }
+        }
+
+        // Character Counter and Generate Button State
+        textInput.addEventListener("input", function () {
+            const currentLength = textInput.value.length;
+            charCounter.textContent = `${currentLength}/${MAX_CHAR_LIMIT}`;
+
+            if (currentLength > 0 && currentLength <= MAX_CHAR_LIMIT) {
+                generateBtn.disabled = false;
+                textInput.classList.remove("over-limit");
+            } else {
+                generateBtn.disabled = true;
+                if (currentLength > MAX_CHAR_LIMIT) {
+                    textInput.classList.add("over-limit");
+                } else {
+                    textInput.classList.remove("over-limit");
+                }
+            }
+        });
+
+        // Show Spinner on Generate Button
         function showSpinner() {
             generateBtn.innerHTML = `<div class="spinner"></div>`;
             generateBtn.disabled = true;
         }
 
+        // Reset Generate Button
         function resetGenerateButton() {
             generateBtn.innerHTML = "Generate Audio";
             generateBtn.disabled = false;
         }
 
-        document.getElementById("generate-btn").addEventListener("click", async function () {
-            const text = document.getElementById("text-input").value;
-            if (!text.trim() || text.length > MAX_CHAR_LIMIT) {
+        // Generate Audio Event
+        generateBtn.addEventListener("click", async function () {
+            const text = textInput.value.trim();
+            if (!text || text.length > MAX_CHAR_LIMIT) {
                 alert("Please enter valid text within the character limit.");
                 return;
             }
@@ -228,24 +291,18 @@
 
                 if (response.ok) {
                     const audioBlob = await response.blob();
-                    console.log('Audio Blob:', audioBlob);
-
-                    if (!audioBlob || audioBlob.size === 0) {
-                        throw new Error('Invalid audio blob.');
-                    }
-
                     const audioUrl = URL.createObjectURL(audioBlob);
-                    console.log('Audio URL:', audioUrl);
 
                     audioSource.src = audioUrl;
                     audioPlayer.load();
 
-                    // Wait for metadata to be loaded to get duration
                     audioPlayer.addEventListener('loadedmetadata', () => {
                         const duration = audioPlayer.duration;
+                        progressBar.max = Math.floor(duration);
                         totalDurationElem.textContent = formatTime(duration);
                     });
-                    playBtn.disabled = false; // Enable play button
+
+                    playBtn.disabled = false;
                 } else {
                     alert("Error generating audio.");
                 }
@@ -257,45 +314,45 @@
             }
         });
 
-        // Play button functionality
+        // Play and Pause Events
         playBtn.addEventListener("click", () => {
             audioPlayer.play();
             playBtn.classList.add("hidden");
             pauseBtn.classList.remove("hidden");
         });
 
-        // Pause button functionality
         pauseBtn.addEventListener("click", () => {
             audioPlayer.pause();
             playBtn.classList.remove("hidden");
             pauseBtn.classList.add("hidden");
         });
 
-        // Update progress bar as audio plays
+        // Update Progress Bar
         audioPlayer.addEventListener("timeupdate", () => {
             const currentTime = Math.floor(audioPlayer.currentTime);
             progressBar.value = currentTime;
             currentTimeElem.textContent = formatTime(currentTime);
         });
 
-        // Allow seeking by dragging progress bar
+        // Seek Audio
         progressBar.addEventListener("input", () => {
             audioPlayer.currentTime = progressBar.value;
         });
 
-        // Playback speed toggle functionality
+        // Playback Speed Toggle
         playbackSpeedBtn.addEventListener("click", () => {
             currentSpeedIndex = (currentSpeedIndex + 1) % playbackSpeeds.length;
             const newSpeed = playbackSpeeds[currentSpeedIndex];
             audioPlayer.playbackRate = newSpeed;
             playbackSpeedBtn.textContent = `${newSpeed}x`;
         });
+
+        // Format Time Function
         function formatTime(seconds) {
             const minutes = Math.floor(seconds / 60);
             const secondsLeft = Math.floor(seconds % 60);
             return `${minutes}:${secondsLeft < 10 ? '0' : ''}${secondsLeft}`;
         }
     </script>
-
 </body>
 </html>
