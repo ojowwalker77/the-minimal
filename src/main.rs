@@ -498,7 +498,7 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
 
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+    let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().expect("Invalid address format");
 
     let shared_data = web::Data::new(AppState {
         db_context: Arc::new(Mutex::new(HashMap::new())),
@@ -507,11 +507,12 @@ async fn main() -> std::io::Result<()> {
         knowledge_net: Arc::new(Mutex::new(HashMap::new())),
     });
 
+    println!("Starting server on port: {}", port);
+
     HttpServer::new(move || {
         App::new()
             .app_data(shared_data.clone())
             .wrap(middleware::Logger::default())
-            // Removed cookie-based session middleware
             .service(home)
             .service(speech_page)
             .service(transcribe_page)
@@ -526,10 +527,15 @@ async fn main() -> std::io::Result<()> {
             .service(close_session)
             .service(Files::new("/static", "./static"))
     })
-    .bind(addr)?
+    .bind(addr)
+    .map_err(|e| {
+        eprintln!("Failed to bind to address: {}", e);
+        e
+    })?
     .run()
     .await
 }
+
 
 fn get_session_id(req: &HttpRequest) -> Option<String> {
     if let Some(header_value) = req.headers().get("X-Session-ID") {
