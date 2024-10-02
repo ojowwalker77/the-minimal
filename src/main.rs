@@ -470,7 +470,7 @@ async fn close_session(
 
 #[get("/")]
 async fn home() -> impl Responder {
-    let html = include_str!("templates/home.html");
+    let html = include_str!("templates/index.html");
     HttpResponse::Ok().content_type("text/html").body(html)
 }
 
