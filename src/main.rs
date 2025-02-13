@@ -1,23 +1,23 @@
-use actix_multipart::Multipart;
 use actix_files::Files;
-use futures_util::stream::StreamExt;
-use async_stream::stream;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, HttpRequest};
+use actix_multipart::Multipart;
 use actix_web::middleware;
-use serde::{Deserialize, Serialize};
+use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use async_stream::stream;
 use dotenv::dotenv;
+use futures_util::stream::StreamExt;
 use futures_util::TryStreamExt;
-use reqwest::Client;
-use uuid::Uuid;
-use std::env;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use std::time::Duration;
-use std::fs;
-use std::path::Path;
 use lopdf::Document;
-use std::net::SocketAddr;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
+use std::fs;
+use std::net::SocketAddr;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 struct TextInput {
@@ -66,7 +66,8 @@ async fn upload_file(
             let data = match chunk {
                 Ok(data) => data,
                 Err(_) => {
-                    return HttpResponse::InternalServerError().body("Error processing file upload.");
+                    return HttpResponse::InternalServerError()
+                        .body("Error processing file upload.");
                 }
             };
             file_data.extend_from_slice(&data);
@@ -92,13 +93,17 @@ async fn upload_file(
     };
 
     let mut uploaded_files = data.uploaded_files.lock().await;
-    uploaded_files.entry(session_id.clone()).or_insert_with(Vec::new).push(UploadedFile {
-        filename: filename.clone(),
-        purpose: info.purpose.clone(),
-        state: "processing".to_string(),
-    });
+    uploaded_files
+        .entry(session_id.clone())
+        .or_insert_with(Vec::new)
+        .push(UploadedFile {
+            filename: filename.clone(),
+            purpose: info.purpose.clone(),
+            state: "processing".to_string(),
+        });
 
-    let response = HttpResponse::Ok().body(format!("File '{}' uploaded, processing started.", filename));
+    let response =
+        HttpResponse::Ok().body(format!("File '{}' uploaded, processing started.", filename));
     let data_clone = data.clone();
     let filename_clone = filename.clone();
     let session_id_clone = session_id.clone();
@@ -108,7 +113,9 @@ async fn upload_file(
         let summary = process_file_and_summarize(&file_path_clone).await;
         if !summary.is_empty() {
             let mut db_context = data_clone.db_context.lock().await;
-            let context_entry = db_context.entry(session_id_clone.clone()).or_insert_with(String::new);
+            let context_entry = db_context
+                .entry(session_id_clone.clone())
+                .or_insert_with(String::new);
             *context_entry = format!("{}\n{}", *context_entry, summary);
 
             let mut uploaded_files = data_clone.uploaded_files.lock().await;
@@ -153,7 +160,7 @@ async fn process_file_and_summarize(file_path: &str) -> String {
         serde_json::json!({
             "role": "user",
             "content": format!("The document content is as follows:\n\n{}", extracted_text),
-        })
+        }),
     ];
 
     let payload = serde_json::json!({
@@ -200,7 +207,10 @@ async fn transcribe_audio(mut payload: Multipart, req: HttpRequest) -> impl Resp
         while let Some(chunk) = field.next().await {
             let data = match chunk {
                 Ok(data) => data,
-                Err(_) => return HttpResponse::InternalServerError().body("Error processing file upload."),
+                Err(_) => {
+                    return HttpResponse::InternalServerError()
+                        .body("Error processing file upload.")
+                }
             };
             file_data.extend_from_slice(&data);
         }
@@ -236,7 +246,9 @@ async fn transcribe_audio(mut payload: Multipart, req: HttpRequest) -> impl Resp
                     .unwrap_or("No transcription available.");
                 HttpResponse::Ok().json(serde_json::json!({ "transcription": transcription }))
             }
-            Err(_) => HttpResponse::InternalServerError().body("Error parsing transcription response."),
+            Err(_) => {
+                HttpResponse::InternalServerError().body("Error parsing transcription response.")
+            }
         },
         Err(_) => HttpResponse::InternalServerError().body("Error sending transcription request."),
     }
@@ -281,10 +293,7 @@ async fn generate_audio(text_input: web::Json<TextInput>, req: HttpRequest) -> i
 }
 
 #[get("/get-global-context")]
-async fn get_global_context(
-    state: web::Data<AppState>,
-    req: HttpRequest,
-) -> impl Responder {
+async fn get_global_context(state: web::Data<AppState>, req: HttpRequest) -> impl Responder {
     let session_id = match get_session_id(&req) {
         Some(id) => id,
         None => return HttpResponse::BadRequest().body("Missing session ID"),
@@ -324,7 +333,11 @@ async fn update_context(
 }
 
 #[post("/search-ai")]
-async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>, req: HttpRequest) -> impl Responder {
+async fn search_ai(
+    _state: web::Data<AppState>,
+    form: web::Json<TextInput>,
+    req: HttpRequest,
+) -> impl Responder {
     let _session_id = match get_session_id(&req) {
         Some(id) => id,
         None => return HttpResponse::BadRequest().body("Missing session ID"),
@@ -342,7 +355,7 @@ async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>, req:
         serde_json::json!({
             "role": "user",
             "content": format!("Please provide a concise explanation or relevant information about: {}", search_query),
-        })
+        }),
     ];
 
     let payload = serde_json::json!({
@@ -369,10 +382,18 @@ async fn search_ai(_state: web::Data<AppState>, form: web::Json<TextInput>, req:
                     .to_string();
                 HttpResponse::Ok().json(serde_json::json!({ "result": search_result }))
             }
-            Err(_) => HttpResponse::InternalServerError().body("Error parsing response from GPT-4."),
+            Err(_) => {
+                HttpResponse::InternalServerError().body("Error parsing response from GPT-4.")
+            }
         },
         Err(_) => HttpResponse::InternalServerError().body("Error calling GPT-4 API."),
     }
+}
+
+#[get("/about")]
+async fn about_page() -> impl Responder {
+    let html = include_str!("templates/about.html");
+    HttpResponse::Ok().content_type("text/html").body(html)
 }
 
 #[get("/get-ai-results")]
@@ -385,14 +406,15 @@ async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Re
     let db_context = state.db_context.lock().await;
     let input_context = state.input_context.lock().await;
 
+    // Get both contexts: uploaded documents + user input
     let context = format!(
         "{}\n{}",
         db_context.get(&session_id).unwrap_or(&"".to_string()),
         input_context.get(&session_id).unwrap_or(&"".to_string()),
     );
 
-    if context.is_empty() {
-        return HttpResponse::Ok().body("");
+    if context.trim().is_empty() {
+        return HttpResponse::Ok().body("No context available.");
     }
 
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
@@ -401,19 +423,19 @@ async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Re
     let messages = vec![
         serde_json::json!({
             "role": "system",
-            "content": "You are a writing assistant that provides suggestions for the next line of a document."
+            "content": "You are an AI writing assistant. Continue the user's notes based on the uploaded files and previous context. Ensure coherence."
         }),
         serde_json::json!({
             "role": "user",
-            "content": format!("The document is as follows:\n\n{}\n\nPlease suggest the next line.", context),
-        })
+            "content": format!("Given the following context:\n{}\n\nComplete the next line of text logically:", context),
+        }),
     ];
 
     let payload = serde_json::json!({
         "model": "gpt-4",
         "messages": messages,
-        "max_tokens": 50,
-        "temperature": 1.0,
+        "max_tokens": 100,
+        "temperature": 0.7,
     });
 
     let response = client
@@ -433,7 +455,9 @@ async fn get_ai_results(state: web::Data<AppState>, req: HttpRequest) -> impl Re
                     .to_string();
                 HttpResponse::Ok().body(suggestion)
             }
-            Err(_) => HttpResponse::InternalServerError().body("Error parsing response from GPT-4."),
+            Err(_) => {
+                HttpResponse::InternalServerError().body("Error parsing response from GPT-4.")
+            }
         },
         Err(_) => HttpResponse::InternalServerError().body("Error calling GPT-4 API."),
     }
@@ -450,7 +474,6 @@ async fn close_session(
         None => return HttpResponse::BadRequest().body("Missing session ID"),
     };
 
-    // Remove session data
     {
         let mut db_context = state.db_context.lock().await;
         db_context.remove(&session_id);
@@ -463,7 +486,6 @@ async fn close_session(
         let mut uploaded_files = state.uploaded_files.lock().await;
         uploaded_files.remove(&session_id);
     }
-    // Remove any other session-specific data as needed
 
     HttpResponse::Ok().body("Session closed")
 }
@@ -498,7 +520,9 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
 
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().expect("Invalid address format");
+    let addr: SocketAddr = format!("0.0.0.0:{}", port)
+        .parse()
+        .expect("Invalid address format");
 
     let shared_data = web::Data::new(AppState {
         db_context: Arc::new(Mutex::new(HashMap::new())),
@@ -514,6 +538,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(shared_data.clone())
             .wrap(middleware::Logger::default())
             .service(home)
+            .service(about_page)
             .service(speech_page)
             .service(transcribe_page)
             .service(notes_page)
@@ -525,7 +550,7 @@ async fn main() -> std::io::Result<()> {
             .service(search_ai)
             .service(upload_file)
             .service(close_session)
-            .service(Files::new("/static", "./static"))
+            .service(Files::new("/static", "./src/static"))
     })
     .bind(addr)
     .map_err(|e| {
@@ -535,7 +560,6 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-
 
 fn get_session_id(req: &HttpRequest) -> Option<String> {
     if let Some(header_value) = req.headers().get("X-Session-ID") {

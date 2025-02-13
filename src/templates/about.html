@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>About - The Minimal Company</title>
+        <link
+            href="https://cdn.jsdelivr.net/npm/tailwindcss@2.0.0/dist/tailwind.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            body.light-mode {
+                background-color: #f9fafb;
+                color: #1f2937;
+                letter-spacing: 0.05em;
+            }
+            body.dark-mode {
+                background-color: #0b0c10;
+                color: #c5c6c7;
+                letter-spacing: 0.05em;
+            }
+            .container {
+                max-width: 600px;
+                margin: auto;
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+            }
+            .back {
+                position: absolute;
+                top: 1rem;
+                left: 1rem;
+                font-size: 1.25rem;
+                font-weight: bold;
+            }
+            .btn {
+                background-color: black;
+                color: white;
+                padding: 0.5rem 1rem;
+                border-radius: 0.25rem;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                font-size: 0.9rem;
+                margin-top: 1rem;
+            }
+            body.dark-mode .btn {
+                background-color: white;
+                color: black;
+            }
+            .btn svg {
+                width: 18px;
+                height: 18px;
+                fill: currentColor;
+            }
+            footer {
+                position: absolute;
+                bottom: 1rem;
+                font-size: 0.75rem;
+            }
+            /* Theme Toggle Button */
+            #themeToggle {
+                position: absolute;
+                top: 1rem;
+                right: 1rem;
+                padding: 0.5rem;
+                border-radius: 0.375rem;
+                cursor: pointer;
+            }
+
+            #themeIcon {
+                width: 24px;
+                height: 24px;
+            }
+        </style>
+    </head>
+    <body
+        class="pr-10 pl-10 h-screen flex flex-col justify-center items-center text-center light-mode"
+    >
+        <button
+            id="themeToggle"
+            class="absolute top-4 right-4 p-2 rounded-md focus:outline-none"
+        >
+            <svg
+                id="themeIcon"
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            ></svg>
+        </button>
+
+        <div class="container">
+            <h1 class="text-3xl font-bold mb-8 mt-6 flex items-center">
+                About
+            </h1>
+            <p class="mt-0 text-sm">
+                This is a simple open-source project made by
+                <strong>Jonatas Walker Filho</strong> with the sole purpose of
+                putting free useful tools in people's hands.
+            </p>
+            <p class="mt-2 text-sm">
+                All source code is available on GitHub and directly in the
+                interface for download.
+            </p>
+            <p class="mt-2 text-sm">
+                This whole project is based on <strong>minimalism</strong> and
+                runs on a <strong>single Rust server file</strong> that serves
+                HTML pages. No framework, no React! lol.
+            </p>
+            <div class="mt-4 flex space-x-4">
+                <a
+                    href="https://github.com/ojowwalker77"
+                    target="_blank"
+                    class="btn"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 496 512"
+                    >
+                        <path
+                            d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3 .3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5 .3-6.2 2.3zm44.2-1.7c-2.9 .7-4.9 2.6-4.6 4.9 .3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8z"
+                        />
+                    </svg>
+                    GitHub
+                </a>
+                <a
+                    href="https://www.linkedin.com/in/jonatas-walker-filho-1540831a4"
+                    target="_blank"
+                    class="btn"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 448 512"
+                    >
+                        <path
+                            d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"
+                        />
+                    </svg>
+                    LinkedIn
+                </a>
+            </div>
+        </div>
+        <footer class="mt-auto absolute bottom-4">
+            <p class="text-xs">
+                © 2024 The Minimal Company -
+                <span class="text-[0.625rem]">v0.1.9</span>
+            </p>
+        </footer>
+
+        <script>
+            function initializeTheme() {
+                const themeToggle = document.getElementById("themeToggle");
+                const themeIcon = document.getElementById("themeIcon");
+                const body = document.body;
+                const savedTheme =
+                    localStorage.getItem("theme") || "light-mode";
+
+                body.classList.add(savedTheme);
+                setThemeIcon(body, themeIcon);
+
+                themeToggle.addEventListener("click", () => {
+                    body.classList.toggle("light-mode");
+                    body.classList.toggle("dark-mode");
+                    localStorage.setItem(
+                        "theme",
+                        body.classList.contains("light-mode")
+                            ? "light-mode"
+                            : "dark-mode",
+                    );
+                    setThemeIcon(body, themeIcon);
+                });
+            }
+
+            function setThemeIcon(body, themeIcon) {
+                if (body.classList.contains("dark-mode")) {
+                    themeIcon.innerHTML = `
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17.293 13.293A8 8 0 116.707 2.707
+                8 8 0 0017.293 13.293z" />
+        `;
+                } else {
+                    themeIcon.innerHTML = `
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 3v1m0 16v1M4.22 4.22l.71.71
+                M19.07 19.07l.71.71M1 12h1M21 12h1
+                M4.22 19.78l.71-.71M19.07 4.93l.71-.71
+                M12 5a7 7 0 100 14 7 7 0 000-14z" />
+        `;
+                }
+            }
+            document.addEventListener("DOMContentLoaded", initializeTheme);
+        </script>
+    </body>
+</html>
